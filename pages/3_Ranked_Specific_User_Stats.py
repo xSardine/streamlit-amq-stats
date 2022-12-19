@@ -62,12 +62,17 @@ def get_player_data(player, players_answers, rankeds_games, start_date, end_date
 def plot_distribution(player_answers, ranked_songs):
 
     st.write("## General Information")
+    st.write(
+        f"{player} played in **{ranked_songs.rankedId.unique().size}** ranked, and was present for **{player_answers.rankedSongId.size}** songs between **{start_date}** and **{end_date}**"
+    )
 
     region_label_map = {
         1.0: {"label": "Asia", "color": "rgb(0,150,0)"},
-        2.0: {"label": "NA", "color": "rgb(150,0,0)"},
-        3.0: {"label": "EU", "color": "rgb(0,0,150)"},
+        2.0: {"label": "EU", "color": "rgb(150,0,0)"},
+        3.0: {"label": "NA", "color": "rgb(0,0,150)"},
     }
+
+    col1, col2 = st.columns(2)
 
     values = ranked_songs.groupby(["rankedId"]).mean().region.value_counts().values
     labels = [
@@ -87,24 +92,24 @@ def plot_distribution(player_answers, ranked_songs):
     explode = np.zeros(len(values))
     explode[np.argmax(values)] = 0.03
 
-    fig = make_subplots(rows=1, cols=2, specs=[[{"type": "pie"}, {"type": "pie"}]])
-
-    # First pie chart
-    fig.add_trace(
-        go.Pie(
-            labels=labels,
-            values=values,
-            pull=explode,
-            title="Regions Distribution",
-            domain=dict(x=[0, 0.5]),
-            marker=dict(colors=colors),
-            hovertemplate="Region: %{label}<br>%{value} Rankeds<extra></extra>",
-            showlegend=True,  # Add this line
-            legendgroup="group1",  # Add this line
+    fig = go.Figure(
+        data=[
+            go.Pie(
+                labels=labels,
+                values=values,
+                pull=explode,
+                title="Regions Distribution",
+                domain=dict(x=[0, 0.5]),
+                marker=dict(colors=colors),
+                hovertemplate="Region: %{label}<br>%{value} Rankeds<extra></extra>",
+            ),
+        ],
+        layout=go.Layout(
+            legend=go.layout.Legend(x=0.1, y=1.1, xanchor="right", yanchor="top")
         ),
-        row=1,
-        col=1,
     )
+
+    col1.plotly_chart(fig)
 
     guess_label_map = {
         1: {"label": "Correct Guess", "color": "rgb(0,150,0)"},
@@ -123,24 +128,21 @@ def plot_distribution(player_answers, ranked_songs):
     explode = np.zeros(len(values))
     explode[np.argmax(values)] = 0.03
 
-    # Second pie chart
-    fig.add_trace(
-        go.Pie(
-            labels=labels,
-            values=values,
-            pull=explode,
-            title="Guesses Distribution",
-            domain=dict(x=[0.5, 1.0]),
-            marker=dict(colors=colors),
-            hovertemplate="%{value} Guesses<extra></extra>",
-            showlegend=True,  # Add this line
-            legendgroup="group2",  # Add this line
-        ),
-        row=1,
-        col=2,
+    fig = go.Figure(
+        data=[
+            go.Pie(
+                labels=labels,
+                values=values,
+                pull=explode,
+                title="Guesses Distribution",
+                domain=dict(x=[0.5, 1.0]),
+                marker=dict(colors=colors),
+                hovertemplate="%{value} Guesses<extra></extra>",
+            ),
+        ]
     )
 
-    st.plotly_chart(fig)
+    col2.plotly_chart(fig)
 
 
 def plot_top_n_low_pointers(player, player_answers, ranked_songs):
@@ -214,7 +216,9 @@ def plot_performances_over_time(player, player_answers, ranked_songs):
     return
 
 
-st.set_page_config(page_title="Ranked - Specific User", page_icon="📈")
+st.set_page_config(
+    page_title="Ranked - Specific User", page_icon="📈", layout="centered"
+)
 st.markdown("# Ranked - Specific User")
 st.sidebar.header("Ranked - Specific User")
 
