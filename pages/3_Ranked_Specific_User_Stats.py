@@ -18,6 +18,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
 from plotly.subplots import make_subplots
+import datetime
 
 
 DATA_CSV_PATH = Path("data/csv/")
@@ -40,27 +41,44 @@ def pie_autopct(values):
     return tmp_autopct
 
 
-def plot_distribution(players_answers, rankeds_games):
-
-    player = st.text_input(
-        label="What is your AMQ username ? (case sensitive)",
-        placeholder="AMQ Username",
-        value="Rukawa11",
-    )
-
-    region_labels = ["Asia", "EU", "NA"]
+def get_player_data(player, players_answers, rankeds_games, start_date, end_date):
 
     player_answers = players_answers[players_answers.playerName == player]
+
     ranked_songs = rankeds_games[
         rankeds_games.rankedSongId.isin(player_answers.rankedSongId)
     ]
 
-    if player_answers.size == 0:
-        return
+    ranked_songs = ranked_songs[ranked_songs.date >= str(start_date)]
+    ranked_songs = ranked_songs[ranked_songs.date <= str(end_date)]
+
+    player_answers = player_answers[
+        player_answers.rankedSongId.isin(ranked_songs.rankedSongId.values)
+    ]
+
+    return player_answers, ranked_songs
+
+
+def plot_distribution(player_answers, ranked_songs):
+
+    st.write("## General Information")
+
+    region_label_map = {
+        1.0: {"label": "Asia", "color": "rgb(0,150,0)"},
+        2.0: {"label": "NA", "color": "rgb(150,0,0)"},
+        3.0: {"label": "EU", "color": "rgb(0,0,150)"},
+    }
 
     values = ranked_songs.groupby(["rankedId"]).mean().region.value_counts().values
     labels = [
-        region_labels[int(label - 1)]
+        region_label_map[label]["label"]
+        for label in ranked_songs.groupby(["rankedId"])
+        .mean()
+        .region.value_counts()
+        .index
+    ]
+    colors = [
+        region_label_map[label]["color"]
         for label in ranked_songs.groupby(["rankedId"])
         .mean()
         .region.value_counts()
@@ -79,6 +97,7 @@ def plot_distribution(players_answers, rankeds_games):
             pull=explode,
             title="Regions Distribution",
             domain=dict(x=[0, 0.5]),
+            marker=dict(colors=colors),
             hovertemplate="Region: %{label}<br>%{value} Rankeds<extra></extra>",
             showlegend=True,  # Add this line
             legendgroup="group1",  # Add this line
@@ -87,10 +106,18 @@ def plot_distribution(players_answers, rankeds_games):
         col=1,
     )
 
-    correctLabels = ["Correct Guess", "Incorrect Guess"]
+    guess_label_map = {
+        1: {"label": "Correct Guess", "color": "rgb(0,150,0)"},
+        0: {"label": "Incorrect Guess", "color": "rgb(150,0,0)"},
+    }
+
     values = player_answers.isCorrect.value_counts().values
     labels = [
-        correctLabels[int(label - 1)]
+        guess_label_map[label]["label"]
+        for label in player_answers.isCorrect.value_counts().index
+    ]
+    colors = [
+        guess_label_map[label]["color"]
         for label in player_answers.isCorrect.value_counts().index
     ]
     explode = np.zeros(len(values))
@@ -104,12 +131,7 @@ def plot_distribution(players_answers, rankeds_games):
             pull=explode,
             title="Guesses Distribution",
             domain=dict(x=[0.5, 1.0]),
-            marker=dict(
-                colors=[
-                    "rgb(0,150,0)",
-                    "rgb(150,0,0)",
-                ],  # specify custom colors for the pie slices
-            ),
+            marker=dict(colors=colors),
             hovertemplate="%{value} Guesses<extra></extra>",
             showlegend=True,  # Add this line
             legendgroup="group2",  # Add this line
@@ -121,14 +143,124 @@ def plot_distribution(players_answers, rankeds_games):
     st.plotly_chart(fig)
 
 
+def plot_top_n_low_pointers(player, player_answers, ranked_songs):
+
+    st.write("## Low Pointers")
+    st.write(f"Number of time where {player} was one of the few to answer correctly")
+
+    nb_low = st.slider(
+        "Choose what you consider the limit to a low pointer", 4, 10, value=5
+    )
+
+    x = list(
+        ranked_songs[
+            ranked_songs.rankedSongId.isin(
+                player_answers[player_answers.isCorrect == 1].rankedSongId
+            )
+        ]
+        .correctCount.value_counts()
+        .sort_index()
+        .values
+    )[: nb_low + 1]
+
+    y = list(range(1, len(x)))
+
+    fig1 = go.Figure()
+    # Draw points
+    fig1.add_trace(
+        go.Scatter(
+            x=x,
+            y=y,
+            hovertemplate="%{x} Occurences<extra></extra>",
+            mode="markers",
+            marker_color="darkblue",
+            marker_size=10,
+        )
+    )
+
+    x = x[:-1]
+
+    # Draw lines
+    for i, x_ in enumerate(x):
+        fig1.add_shape(
+            type="line",
+            x0=0,
+            y0=i + 1,
+            x1=x_,
+            y1=i + 1,
+            line=dict(color="crimson", width=3),
+        )
+
+    fig1.update_yaxes(
+        title=f"Number of correct people including {player}", range=[0.8, nb_low + 1]
+    )
+    fig1.update_xaxes(title="Number of occurences", range=[0.9, np.max(x) + 10])
+    fig1.update_layout(hovermode="y")
+
+    st.plotly_chart(fig1)
+
+
+def plot_top_n_best_ranked(player, player_answers, ranked_songs):
+    st.write("## Top Rankeds")
+    st.write(f"{player}'s best ranked scores.")
+    st.write("In development...")
+    return
+
+
+def plot_performances_over_time(player, player_answers, ranked_songs):
+    st.write("## Performances over time")
+    st.write(f"{player}'s performances over time.")
+    st.write("In development...")
+    return
+
+
 st.set_page_config(page_title="Ranked - Specific User", page_icon="📈")
 st.markdown("# Ranked - Specific User")
 st.sidebar.header("Ranked - Specific User")
 
 st.write(
-    """Ranked statistics are based on blissfulyoshi's ranked data. They start from October 29th 2022."""
+    """Ranked statistics are based on blissfulyoshi's ranked data. They start from October 1st 2022."""
 )
 
 anime_songs, players_answers, rankeds_games = load_data()
 
-plot_distribution(players_answers, rankeds_games)
+player = st.text_input(
+    label="What is your AMQ username ? (case sensitive)",
+    placeholder="AMQ Username",
+    value="Rukawa11",
+)
+
+st.write("Period to check:")
+
+today = datetime.date.today()
+
+col1, col2 = st.columns(2)
+
+start_date = col1.date_input(
+    "Start date",
+    datetime.date(2022, 10, 1),
+    min_value=datetime.date(2022, 10, 1),
+    max_value=today,
+)
+
+end_date = col2.date_input(
+    "End date",
+    today,
+    min_value=datetime.date(2022, 10, 1),
+    max_value=today,
+)
+
+if start_date > end_date:
+    st.error("Error: End date must fall after start date.")
+
+player_answers, ranked_songs = get_player_data(
+    player, players_answers, rankeds_games, start_date, end_date
+)
+
+if player_answers.size == 0:
+    st.error(f"No data for {player} in the specified time period.")
+else:
+    plot_distribution(player_answers, ranked_songs)
+    plot_top_n_low_pointers(player, player_answers, ranked_songs)
+    plot_top_n_best_ranked(player, players_answers, rankeds_games)
+    plot_performances_over_time(player, players_answers, rankeds_games)
