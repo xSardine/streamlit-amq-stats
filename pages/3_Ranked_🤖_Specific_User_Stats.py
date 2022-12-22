@@ -14,136 +14,93 @@
 
 import streamlit as st
 import numpy as np
-import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-from pathlib import Path
 from plotly.subplots import make_subplots
-import datetime
+import datetime, re
+import utils
 
 
-DATA_CSV_PATH = Path("data/csv/")
+color_map = {
+    "Asia": "rgb(255, 171, 171)",
+    "Europe": "rgb(131, 201, 255)",
+    "America": "rgb(0, 104, 201)",
+}
 
 
-@st.cache
-def load_data():
-    anime_songs = pd.read_csv(DATA_CSV_PATH / Path("anime_songs.csv"))
-    players_answers = pd.read_csv(DATA_CSV_PATH / Path("players_answers.csv"))
-    rankeds_games = pd.read_csv(DATA_CSV_PATH / Path("rankeds_games.csv"))
-    return anime_songs, players_answers, rankeds_games
+def get_username_data(username, start_date, end_date):
 
-
-def pie_autopct(values):
-    def tmp_autopct(pct):
-        total = sum(values)
-        val = int(round(pct * total / 100.0))
-        return "{p:.2f}%  ({v:d})".format(p=pct, v=val)
-
-    return tmp_autopct
-
-
-def get_player_data(player, players_answers, rankeds_games, start_date, end_date):
-
-    player_answers = players_answers[players_answers.playerName == player]
-
-    ranked_songs = rankeds_games[
-        rankeds_games.rankedSongId.isin(player_answers.rankedSongId)
-    ]
-
-    player_answers = player_answers.merge(
-        ranked_songs[
-            [
-                "rankedId",
-                "rankedSongId",
-                "songId",
-                "date",
-                "region",
-                "correctCount",
-                "activePlayers",
-            ]
-        ],
-        how="left",
-    )
+    anime_songs = utils.extract_anime_songs()
+    player_answers = utils.extract_answers_username(username)
 
     player_answers = player_answers[player_answers.date >= str(start_date)]
     player_answers = player_answers[player_answers.date <= str(end_date)]
 
-    return player_answers
+    return anime_songs, player_answers
 
 
-def plot_distribution(player_answers):
+def plot_distribution(username, anime_songs, player_answers, start_date, end_date):
 
-    st.write("# General Information")
-    st.write(
-        f"{player} played in **{player_answers.rankedId.unique().size}** ranked, and was present for **{player_answers.rankedSongId.size}** songs between **{start_date}** and **{end_date}**"
+    st.markdown(
+        f"""
+    # General Information
+
+    :orange[{username}] played in :orange[{player_answers.rankedId.unique().size} ranked], and was present for :orange[{player_answers.rankedSongId.size} songs] between :orange[{start_date}] and :orange[{end_date}]
+    """
     )
-
-    color_map = {
-        "Asia": "rgb(0,150,0)",
-        "Europe": "rgb(150,0,0)",
-        "North America": "rgb(0,0,150)",
-    }
-
-    values = player_answers.groupby("rankedId").region.unique().value_counts().values
-
-    colors = [color_map[label] for label in player_answers.region.unique()]
-
-    explode = np.zeros(len(values))
-    explode[np.argmax(values)] = 0.03
 
     fig = make_subplots(rows=1, cols=2, specs=[[{"type": "pie"}, {"type": "pie"}]])
 
     # First pie chart
+
+    values = player_answers.groupby("rankedId").region.unique().value_counts().values
+
     fig.add_trace(
         go.Pie(
             labels=player_answers.region.unique(),
             values=values,
-            pull=explode,
             title="Regions Distribution",
             domain=dict(x=[0, 0.5]),
-            marker=dict(colors=colors),
-            showlegend=True,  # Add this line
-            legendgroup="group1",  # Add this line
+            hole=0.5,
+            marker=dict(
+                colors=[color_map[label] for label in player_answers.region.unique()]
+            ),
+            showlegend=True,
+            legendgroup="group1",
             hovertemplate="Region: %{label}<br>%{value} Rankeds<extra></extra>",
         ),
         row=1,
         col=1,
     )
 
+    # Second pie chart
+
     guess_label_map = {
-        1: {"label": "Correct Guess", "color": "rgb(0,150,0)"},
-        0: {"label": "Incorrect Guess", "color": "rgb(150,0,0)"},
+        1: {"label": "Correct Guess", "color": "lightgreen"},
+        0: {"label": "Incorrect Guess", "color": "rgb(255, 127, 127)"},
     }
 
-    values = player_answers.isCorrect.value_counts().values
-    labels = [
-        guess_label_map[label]["label"]
-        for label in player_answers.isCorrect.value_counts().index
-    ]
-    colors = [
-        guess_label_map[label]["color"]
-        for label in player_answers.isCorrect.value_counts().index
-    ]
-    explode = np.zeros(len(values))
-    explode[np.argmax(values)] = 0.03
+    values = player_answers.isCorrect.value_counts()
 
-    # Second pie chart
     fig.add_trace(
         go.Pie(
-            labels=labels,
+            labels=[
+                guess_label_map[label]["label"]
+                for label in player_answers.isCorrect.value_counts().index
+            ],
             values=values,
-            pull=explode,
             title="Guesses Distribution",
             domain=dict(x=[0.5, 1.0]),
+            hole=0.5,
             marker=dict(
                 colors=[
-                    "rgb(0,150,0)",
-                    "rgb(150,0,0)",
-                ],  # specify custom colors for the pie slices
+                    guess_label_map[label]["color"]
+                    for label in player_answers.isCorrect.value_counts().index
+                ]
             ),
-            hovertemplate="%{value} Guesses<extra></extra>",
-            showlegend=True,  # Add this line
-            legendgroup="group2",  # Add this line
+            hovertemplate="%{label}<br>%{value} Guesses<extra></extra>",
+            showlegend=True,
+            legendgroup="group2",
         ),
         row=1,
         col=2,
@@ -152,28 +109,25 @@ def plot_distribution(player_answers):
     st.plotly_chart(fig)
 
 
-def plot_top_n_low_pointers(player, anime_songs, player_answers):
+def plot_top_n_low_pointers(username, anime_songs, player_answers):
 
     st.write("# Low Pointers")
-    st.write(f"Number of time where {player} was one of the few to answer correctly")
-    st.write()
+    st.write(
+        f"Number of time when :orange[{username}] was one of the few to answer correctly"
+    )
+
+    st.write("")
     nb_low = st.slider(
-        "Choose what you consider the limit to a low pointer:", 4, 10, value=5
+        ":blue[Choose what you consider the limit to a low pointer:]", 4, 10, value=5
     )
 
     nb_low += 1
 
-    correctCounts = (
+    x = (
         player_answers[player_answers.isCorrect == 1]
         .correctCount.value_counts()
         .sort_index()
-    )
-
-    x = list(
-        correctCounts.reindex(
-            list(range(1, nb_low)),
-            fill_value=0,
-        )
+        .reindex(list(range(1, nb_low)), fill_value=0)
     )
 
     y = list(range(1, nb_low))
@@ -182,16 +136,12 @@ def plot_top_n_low_pointers(player, anime_songs, player_answers):
         player_answers[player_answers.isCorrect == 1]
         .groupby("correctCount")
         .songId.apply(list)
-    )
-
-    lowPointSongs = lowPointSongs.reindex(
-        list(range(1, nb_low)),
-        fill_value=0,
+        .reindex(range(1, nb_low), fill_value=0)
     )
 
     z = []
 
-    for id, rankedSongs in lowPointSongs.iteritems():
+    for id, rankedSongs in lowPointSongs.items():
 
         if not rankedSongs:
             z.append("")
@@ -200,15 +150,9 @@ def plot_top_n_low_pointers(player, anime_songs, player_answers):
         z_tmp = []
         nb_display = 10
         for songId in rankedSongs[: min(nb_display, len(rankedSongs))]:
-            z_tmp.append(
-                " by ".join(
-                    list(
-                        anime_songs[anime_songs.songId == songId][
-                            ["songName", "songArtist"]
-                        ].values[0]
-                    )
-                )
-            )
+            songName = anime_songs[anime_songs.songId == songId].songName.values[0]
+            songArtist = anime_songs[anime_songs.songId == songId].songArtist.values[0]
+            z_tmp.append(f"{songName} by {songArtist}")
 
         if len(rankedSongs) > nb_display:
             z_tmp.append("[...]")
@@ -241,7 +185,7 @@ def plot_top_n_low_pointers(player, anime_songs, player_answers):
         )
 
     fig1.update_yaxes(
-        title=f"Number of correct people including {player}", range=[0.8, nb_low]
+        title=f"Number of correct people including {username}", range=[0.8, nb_low]
     )
     fig1.update_xaxes(
         title="Number of occurences",
@@ -252,15 +196,17 @@ def plot_top_n_low_pointers(player, anime_songs, player_answers):
     st.plotly_chart(fig1)
 
 
-def plot_top_n_best_ranked(player, player_answers):
-    st.write("# Top Rankeds")
-    st.write(f"{player}'s best ranked scores.")
+def plot_top_n_best_ranked(username, anime_songs, player_answers):
 
-    nb_top = st.slider("Number of rankeds to display:", 3, 30, value=10)
+    st.write("# Top Rankeds")
+    st.write(f":orange[{username}]'s best ranked scores.")
+
+    st.write("")
+    nb_top = st.slider(":blue[Number of rankeds to display:]", 3, 30, value=10)
 
     if nb_top > player_answers.rankedId.unique().size:
         st.error(
-            f"{player} only played {player_answers.rankedId.unique().size} rankeds in that period."
+            f"{username} only played :orange[{player_answers.rankedId.unique().size}] rankeds in that period. Defaulting to :orange[{player_answers.rankedId.unique().size}]"
         )
         nb_top = player_answers.rankedId.unique().size
 
@@ -272,14 +218,10 @@ def plot_top_n_best_ranked(player, player_answers):
     y = list(range(1, nb_top + 1))
 
     indexes = list(topRanked.index)[:nb_top]
+
     z = [
-        " ".join(
-            [
-                player_answers[player_answers.rankedId == index].date.unique()[0],
-                player_answers[player_answers.rankedId == index].region.unique()[0],
-            ]
-        )
-        for index in indexes
+        f"{row.date} {row.region}"
+        for _, row in player_answers[player_answers.rankedId.isin(indexes)].iterrows()
     ]
 
     fig1 = go.Figure()
@@ -320,50 +262,74 @@ def plot_top_n_best_ranked(player, player_answers):
     st.plotly_chart(fig1)
 
 
-def plot_performances_over_time(player, player_answers):
+def plot_performances_over_time(
+    username, anime_songs, player_answers, start_date, end_date
+):
 
     st.write("# Play Time")
-    st.write("*Data was not being collect from November 23rd to December 3rd")
 
     st.write(
-        f"{player} spent approximately {round(player_answers.isCorrect.size / 2 / 60)} hours playing ranked between {start_date} and {end_date}"
+        f":orange[{username}] spent approximately :orange[{round(player_answers.isCorrect.size / 2 / 60)} hours] playing ranked between :orange[{start_date}] and :orange[{end_date}]"
     )
+
+    last_day = max(
+        end_date,
+        datetime.datetime.strptime(np.max(player_answers.date), "%Y-%m-%d").date(),
+    )
+
+    first_day = min(
+        start_date,
+        datetime.datetime.strptime(np.min(player_answers.date), "%Y-%m-%d").date(),
+    )
+
+    nb_day = (last_day - first_day).days
 
     period_map = {
         1: 10,
         2: nb_day / 4,
         3: nb_day / 2,
-        4: nb_day * 2,
+        4: nb_day * 1.5,
     }
+    st.write("")
     periodBin = st.slider(
-        "Period Precision:",
+        ":blue[Period Precision:]",
         1,
         4,
         value=3,
     )
     periodBin = int(period_map[periodBin])
 
-    fig = px.histogram(player_answers, x="date", nbins=periodBin)
+    fig = px.histogram(
+        player_answers,
+        x="date",
+        color="region",
+        color_discrete_map=color_map,
+        nbins=periodBin,
+    )
     fig.update_layout(bargap=0.2, hovermode="x")
-    fig.update_traces(hovertemplate="Period: %{x}<br>%{y} songs played<extra></extra>")
     fig.update_yaxes(title=f"Number of songs played")
     fig.update_xaxes(title="Date")
     st.plotly_chart(fig)
 
-    st.write("### Score over time")
+    st.write("### Guess Rate over time")
 
     df = (
-        player_answers.groupby("date")
+        player_answers.groupby(["date", "region"])
         .isCorrect.mean()
         .apply(lambda x: round(x, 4) * 100)
         .reset_index()
     )
 
-    fig = px.histogram(df, x="date", y="isCorrect", nbins=periodBin, histfunc="avg")
-    fig.update_layout(bargap=0.2, hovermode="x")
-    fig.update_traces(
-        hovertemplate="Period: %{x}<br>%{y}%<extra></extra>",
+    fig = px.histogram(
+        df,
+        x="date",
+        y="isCorrect",
+        color="region",
+        color_discrete_map=color_map,
+        nbins=periodBin,
+        histfunc="avg",
     )
+    fig.update_layout(bargap=0.3, hovermode="x", barmode="group")
 
     fig.update_yaxes(
         title=f"Guess rate",
@@ -374,11 +340,8 @@ def plot_performances_over_time(player, player_answers):
 
     st.plotly_chart(fig)
 
-    st.write("In development...")
-    return
 
-
-def plot_worst_songs(player, anime_songs, player_answers):
+def plot_worst_songs(username, anime_songs, player_answers):
     st.write("# Songs missed more than once")
     st.write(f"Please, learn those songs already...")
 
@@ -396,50 +359,53 @@ def plot_worst_songs(player, anime_songs, player_answers):
     ]
 
     if missed.empty:
-        st.success("You never missed a song more than once")
+        st.success(f":orange[{username}] never missed a song more than once")
     else:
-        st.write(missed)
+        st.dataframe(missed, use_container_width=True)
 
     return
 
 
-st.set_page_config(
-    page_title="Ranked Statistics - Specific User",
-    page_icon="📈",
-)
-st.markdown("# Ranked - Specific User")
-st.sidebar.header("Ranked - Specific User")
+def initialize():
 
-st.write(
-    """Ranked statistics are based on blissfulyoshi's ranked data. They start from October 1st 2022."""
-)
+    st.set_page_config(
+        page_title="Ranked Statistics - Specific User",
+        page_icon="🤖",
+    )
 
-anime_songs, players_answers, rankeds_games = load_data()
+    st.title("Ranked Statistics - Specific User")
+    st.sidebar.header("Ranked Statistics - Specific User")
 
-player = st.text_input(
-    label="What is your AMQ username ? (case sensitive)",
-    placeholder="AMQ Username",
-    value="Rukawa11",
-)
+    st.markdown(
+        "Ranked statistics are based on [blissfulyoshi](https://github.com/blissfulyoshi)'s ranked data. They start from October 1st 2022.\n\nIt is still being collected to this day, but the last update go up to December 19th 2022."
+    )
+    st.caption("*Data was not being collected from November 23rd to December 3rd")
 
-if not player:
-    st.error("Input a player")
-else:
-    st.write("Period to check:")
+    username = st.text_input(
+        label=":blue[What is your AMQ username ? _(case sensitive)_]",
+        placeholder="AMQ Username",
+    )
+
+    if not username:
+        st.error("Input a valid username")
+        return False, False, False
+
+    st.write("")
+    st.write(":blue[Period to check:]")
 
     today = datetime.date.today()
 
     col1, col2 = st.columns(2)
 
     start_date = col1.date_input(
-        "Start date",
+        ":blue[Start date:]",
         datetime.date(2022, 10, 1),
         min_value=datetime.date(2022, 10, 1),
         max_value=today,
     )
 
     end_date = col2.date_input(
-        "End date",
+        ":blue[End date:]",
         today,
         min_value=datetime.date(2022, 10, 1),
         max_value=today,
@@ -447,18 +413,21 @@ else:
 
     if start_date > end_date:
         st.error("Error: End date must fall after start date.")
+        return False, False, False
 
-    nb_day = rankeds_games.date.unique().size
-
-    player_answers = get_player_data(
-        player, players_answers, rankeds_games, start_date, end_date
-    )
+    anime_songs, player_answers = get_username_data(username, start_date, end_date)
 
     if player_answers.size == 0:
-        st.error(f"No data for {player} in the specified time period.")
+        swap = username if not re.match("^ +$", username) else "this username"
+        st.error(f"No data for :orange[{swap}] in the specified time period.")
     else:
-        plot_distribution(player_answers)
-        plot_top_n_low_pointers(player, anime_songs, player_answers)
-        plot_top_n_best_ranked(player, player_answers)
-        plot_performances_over_time(player, player_answers)
-        plot_worst_songs(player, anime_songs, player_answers)
+        plot_distribution(username, anime_songs, player_answers, start_date, end_date)
+        plot_top_n_low_pointers(username, anime_songs, player_answers)
+        plot_top_n_best_ranked(username, anime_songs, player_answers)
+        plot_performances_over_time(
+            username, anime_songs, player_answers, start_date, end_date
+        )
+        plot_worst_songs(username, anime_songs, player_answers)
+
+
+initialize()
