@@ -1,3 +1,10 @@
+"""
+Temporary fix to high memory usage and high cpu usage:
+Preprocess most of it in advance.
+
+Probably possible to optimize stuff, and need to use sql requests more to not load all data everytime
+"""
+
 import pandas as pd
 from pathlib import Path
 import numpy as np
@@ -52,6 +59,14 @@ def process_top_player_df(players_answers, start_date, end_date, nbDisplay):
     players_answers = players_answers[players_answers.date >= str(start_date)]
     players_answers = players_answers[players_answers.date <= str(end_date)]
 
+    topSolo = (
+        players_answers.query("isCorrect == 1 & correctCount == 1")
+        .groupby("playerName")
+        .rankedSongId.size()
+        .reset_index(name="nbSoloPoints")
+        .sort_values(by=["nbSoloPoints"], ascending=False)
+    )
+
     df = (
         players_answers.groupby(["date", "region", "playerName"])
         .isCorrect.mean()
@@ -63,14 +78,9 @@ def process_top_player_df(players_answers, start_date, end_date, nbDisplay):
     df["score"] = grouped_df.isCorrect.sum().values
     df["total"] = grouped_df.isCorrect.count().values
 
-    topScore = (
-        df.groupby("playerName")
-        .agg({"score": "max", "date": "first", "region": "first"})
-        .sort_values(by=["score"], ascending=False)
-        .reset_index()
-        .iloc[:nbDisplay]
-    )
-    topScore.index = np.arange(1, len(topScore) + 1)
+    idx = df.groupby("playerName").score.transform(max) == df.score
+
+    topScore = df[idx].sort_values(by=["score"], ascending=False)
 
     # Group the data by playerName and region, and calculate the sum of the total column
     df_grouped = df.groupby(["playerName", "region"], as_index=False).total.sum()
@@ -90,9 +100,19 @@ def process_top_player_df(players_answers, start_date, end_date, nbDisplay):
     head_id = df_merged[df_merged.playerName != df_merged.playerName.shift()].index[
         nbDisplay + 2
     ]
-    topTime = df_merged.iloc[3:head_id].rename(columns={"total_y": "nbSongs"})
 
-    return topScore, topTime
+    if nbDisplay:
+        topTime = df_merged.iloc[3:head_id].rename(columns={"total_y": "nbSongs"})
+        # print(topScore)
+        topScore = topScore.iloc[:nbDisplay][
+            ["date", "region", "playerName", "score"]
+        ].drop_duplicates("playerName")
+        topScore.index = np.arange(1, len(topScore) + 1)
+        return topScore, topTime, topSolo.iloc[:nbDisplay]
+    else:
+        topTime = df_merged.rename(columns={"total_y": "nbSongs"})
+        topScore.index = np.arange(1, len(topScore) + 1)
+        return topScore, topTime, topSolo
 
 
 def count_unique_players(x):
@@ -235,6 +255,26 @@ def process_top_anime_songs(
     return topSpamAnime, topSpamSongs, topEasySongs, topHardSongs
 
 
+def process_players_top(topScore, topTime, topSolo):
+
+    topScore = (
+        topScore.groupby("playerName")
+        .score.first()
+        .sort_values(ascending=False)
+        .reset_index()
+    )
+    topTime = topTime.groupby("playerName").nbSongs.sum().reset_index()
+
+    print(topScore.shape[0], topTime.shape[0], topSolo.shape[0])
+    allTop = (
+        topTime.merge(topScore, on="playerName", how="left")
+        .merge(topSolo, on="playerName", how="left")
+        .fillna(0)
+    )
+
+    return allTop
+
+
 sqliteConnection, cursor = utils.connect_to_database(
     DATA_RAW_PATH / Path("rankedData.db")
 )
@@ -245,19 +285,31 @@ start_date = datetime.date(2022, 10, 1)
 end_date = datetime.date.today()
 
 players_answers = utils.extract_top_user_data()
-topScore, topTime = process_top_player_df(
+
+
+topScore, topTime, topSolo = process_top_player_df(
+    players_answers, start_date, end_date, 0
+)
+allTop = process_players_top(topScore, topTime, topSolo)
+allTop.to_csv(f"data/preprocessed/allTop_{start_date}.csv")
+
+"""
+topScore, topTime, topSolo = process_top_player_df(
     players_answers, start_date, end_date, nbDisplay
 )
 topRegions = process_top_regions(players_answers, start_date, end_date)
 
 topScore.to_csv(f"data/preprocessed/topScore_{nbDisplay}_{start_date}.csv")
 topTime.to_csv(f"data/preprocessed/topTime_{nbDisplay}_{start_date}.csv")
+topSolo.to_csv(f"data/preprocessed/topSolo_{nbDisplay}_{start_date}.csv")
 topRegions.to_csv(f"data/preprocessed/topRegions_{start_date}.csv")
 del players_answers
-"""
+
 players_answers = utils.extract_top_songs_data()
 anime_songs = utils.extract_anime_songs()
+"""
 
+"""
 nbDisplay = 20
 topSpamAnime, topSpamSongs, topEasySongs, topHardSongs = process_top_anime_songs(
     players_answers, anime_songs, start_date, end_date, nbDisplay

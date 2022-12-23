@@ -56,8 +56,11 @@ def load_top_users_data(start_date, nbDisplay):
     topTime = pd.read_csv(
         PREPROCESSED_DATA_PATH / Path(f"topTime_{nbDisplay}_{start_date}.csv")
     )
+    topSolo = pd.read_csv(
+        PREPROCESSED_DATA_PATH / Path(f"topSolo_{nbDisplay}_{start_date}.csv")
+    )
 
-    return topScore, topTime
+    return topScore, topTime, topSolo
 
 
 # @st.cache(ttl=24 * 3600, suppress_st_warning=True)
@@ -95,16 +98,20 @@ def plot_top_players(start_date):
 
     nbDisplay = 30
 
-    st.markdown("### Top Players - Best Score")
+    st.markdown("### Top Players - Best Scores")
 
-    topScore, topTime = load_top_users_data(start_date, nbDisplay)
+    st.caption("*Only keeping best score for each player")
+
+    topScore, topTime, topSolo = load_top_users_data(start_date, nbDisplay)
+
+    topScore = topScore.sort_values(by=["score"])
 
     col1, col2, col3 = st.columns(3)
     with col2:
         st.image(
             "static/gold.png",
             width=250,
-            caption=f"👑 {topScore.iloc[0].playerName}: {topScore.iloc[0].score} points | {topScore.iloc[0].date} {topScore.iloc[0].region}",
+            caption=f"👑 {topScore.iloc[-1].playerName}: {topScore.iloc[-1].score} points | {topScore.iloc[-1].date}",
         )
 
     del col1, col2, col3
@@ -114,25 +121,26 @@ def plot_top_players(start_date):
         st.image(
             "static/silver.png",
             width=250,
-            caption=f"⚔️ {topScore.iloc[1].playerName}: {topScore.iloc[1].score} points | {topScore.iloc[1].date} {topScore.iloc[1].region}",
+            caption=f"⚔️ {topScore.iloc[-2].playerName}: {topScore.iloc[-2].score} points | {topScore.iloc[-2].date}",
         )
     with col3:
         st.image(
             "static/bronze.png",
             width=250,
-            caption=f"🗡️ {topScore.iloc[2].playerName}: {topScore.iloc[2].score} points | {topScore.iloc[2].date} {topScore.iloc[2].region}",
+            caption=f"🗡️ {topScore.iloc[-3].playerName}: {topScore.iloc[-3].score} points | {topScore.iloc[-3].date}",
         )
 
     customdata = [
         [x, y]
         for x, y in zip(
-            topScore.sort_values(by=["score"]).date.iloc[:-3],
-            topScore.sort_values(by=["score"]).region.iloc[:-3],
+            topScore.date,
+            topScore.region,
         )
     ]
+
     # Create the stacked bar chart
     fig = px.bar(
-        topScore.iloc[3:].sort_values(by=["score"]),
+        topScore,
         x="score",
         y="playerName",
         height=550,
@@ -140,7 +148,8 @@ def plot_top_players(start_date):
     )
     fig.update_traces(
         customdata=customdata,
-        hovertemplate="%{x} Points<br>%{customdata[0]} %{customdata[1]}",
+        hovertemplate="%{y}<br>%{x} Points<br>%{customdata[0]} %{customdata[1]}",
+        hoverlabel=dict(font=dict(color="blue")),
     )
     fig.update_yaxes(title="Player", dtick=1)
     fig.update_xaxes(
@@ -150,7 +159,7 @@ def plot_top_players(start_date):
 
     st.plotly_chart(fig)
 
-    st.markdown("### Top Players - Songs played")
+    st.markdown("### Top Players - Most Songs Played")
 
     # Create the stacked bar chart
     fig2 = px.bar(
@@ -170,7 +179,46 @@ def plot_top_players(start_date):
 
     st.plotly_chart(fig2)
 
-    del topScore, topTime, fig, fig2, col1, col2, col3
+    st.markdown("### Top Players - Most Solo Points")
+
+    # Create the stacked bar chart
+    topSolo = topSolo.sort_values(by=["nbSoloPoints"])
+    fig3 = go.Figure()
+
+    fig3.add_trace(
+        go.Scatter(
+            x=topSolo.nbSoloPoints,
+            y=topSolo.playerName,
+            mode="markers",
+            marker_color="darkred",
+            marker_size=12,
+        )
+    )
+    # Draw lines
+    for i, x_ in enumerate(topSolo.nbSoloPoints):
+        fig3.add_shape(
+            type="line",
+            x0=0,
+            y0=i,
+            x1=x_,
+            y1=i,
+            line=dict(color="crimson", width=3),
+        )
+
+    fig3.update_yaxes(title="Player", dtick=1)
+    fig3.update_xaxes(title="Number of solo points")
+    fig3.update_traces(
+        hovertemplate="%{y}<br>%{x} times<extra></extra>",
+        hoverlabel=dict(font=dict(color="darkred")),
+    )
+    fig3.update_layout(
+        hovermode="y",
+        height=600,
+        width=730,
+    )
+    st.plotly_chart(fig3)
+
+    del topScore, topTime, fig, fig2, fig3, col1, col2, col3
 
 
 def plot_top_region(start_date):
@@ -179,7 +227,7 @@ def plot_top_region(start_date):
 
     topRegions = load_top_regions_data(start_date)
 
-    st.markdown("### Top Regions - Playerbase")
+    st.markdown("### Top Regions - Total playerbase")
 
     # Create a figure with two traces: one for the bars and one for the horizontal lines
     fig = go.Figure(
@@ -206,7 +254,7 @@ def plot_top_region(start_date):
     # Set the title and axis labels
     fig.update_layout(
         xaxis_title="Region",
-        yaxis_title="Player Count",
+        yaxis_title="Total player Count",
         # Set the colors of the legend items
         legend=dict(
             title=None,
@@ -230,10 +278,11 @@ def plot_top_region(start_date):
         color_discrete_map=color_map,
     )
     fig.update_yaxes(
+        title="Average guess rate",
         range=[
             min(topRegions.averageGuessRate) - 5,
             max(topRegions.averageGuessRate) + 5,
-        ]
+        ],
     )
 
     st.plotly_chart(fig)
@@ -248,7 +297,7 @@ def plot_top_anime_songs(start_date):
         start_date, nbDisplay
     )
 
-    st.markdown("### Spamming anime")
+    st.markdown("### Spamming Anime")
 
     topSpamAnime = topSpamAnime.sort_values(by=["playCount"], ascending=True)
     topSpamAnime["label"] = topSpamAnime.animeName.apply(
@@ -257,12 +306,14 @@ def plot_top_anime_songs(start_date):
     fig = px.bar(topSpamAnime, x="playCount", y="label")
     fig.update_traces(
         hovertemplate="%{label}<br>%{x} times",
+        hoverlabel=dict(font=dict(color="blue")),
     )
     fig.update_yaxes(title="Anime")
+    fig.update_xaxes(title="Play count")
 
     st.plotly_chart(fig)
 
-    st.markdown("### Spamming songs")
+    st.markdown("### Spamming Songs")
 
     topSpamSongs = topSpamSongs.sort_values(by=["playCount"], ascending=True)
     topSpamSongs["label"] = topSpamSongs.songName.apply(
@@ -272,10 +323,12 @@ def plot_top_anime_songs(start_date):
     fig.update_traces(
         customdata=topSpamSongs.songInfo,
         hovertemplate="%{customdata}<br>%{x} times",
+        hoverlabel=dict(font=dict(color="blue")),
     )
     fig.update_yaxes(title="Songs")
     fig.update_xaxes(
-        range=[topSpamSongs.playCount.min() - 2, topSpamSongs.playCount.min() + 2]
+        title="Play count",
+        range=[topSpamSongs.playCount.min() - 2, topSpamSongs.playCount.min() + 2],
     )
 
     st.plotly_chart(fig)
@@ -307,7 +360,7 @@ def plot_top_anime_songs(start_date):
         customdata=customdata,
         hovertemplate="%{customdata[0]}<br>%{customdata[2]}<br>Guess Rate: %{x}%<br>%{customdata[1]} guesses",
         marker_color="rgb(255, 127, 127)",
-        hoverlabel=dict(font=dict(color="rgb(255, 127, 127)")),
+        hoverlabel=dict(font=dict(color="red")),
     )
 
     # Create a bar chart for the top 20 elements
@@ -329,7 +382,7 @@ def plot_top_anime_songs(start_date):
         customdata=customdata,
         hovertemplate="%{customdata[0]}<br>%{customdata[2]}<br>Guess Rate: %{x}%<br>%{customdata[1]} guesses",
         marker_color="lightgreen",
-        hoverlabel=dict(font=dict(color="lightgreen")),
+        hoverlabel=dict(font=dict(color="green")),
     )
 
     # Combine the two charts into a single figure with a split x-axis
@@ -398,7 +451,7 @@ def initialize():
     plot_top_players(start_date)
     plot_top_region(start_date)
     plot_top_anime_songs(start_date)
-    plot_over_time(start_date)
+    # plot_over_time(start_date)
 
 
 initialize()

@@ -61,7 +61,7 @@ def extract_top_user_data():
     sqliteConnection, cursor = connect_to_database("data/raw/rankedData.db")
 
     region_map = {1: "Asia", 2: "Europe", 3: "America"}
-    command = f"SELECT date, region, playerName, isCorrect from players_answers"
+    command = f"SELECT date, region, playerName, isCorrect, rankedSongId, correctCount from players_answers"
     results = run_sql_command(cursor, command)
     df = pd.DataFrame(
         results,
@@ -70,6 +70,8 @@ def extract_top_user_data():
             "region",
             "playerName",
             "isCorrect",
+            "rankedSongId",
+            "correctCount",
         ],
     )
     del results
