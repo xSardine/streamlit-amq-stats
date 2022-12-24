@@ -301,7 +301,7 @@ def plot_top_anime_songs(start_date):
 
     topSpamAnime = topSpamAnime.sort_values(by=["playCount"], ascending=True)
     topSpamAnime["label"] = topSpamAnime.animeName.apply(
-        lambda x: x[:40] + ("..." if len(x) > 25 else "")
+        lambda x: x[:40] + ("..." if len(x) > 40 else "")
     )
     fig = px.bar(topSpamAnime, x="playCount", y="label")
     fig.update_traces(
@@ -317,7 +317,7 @@ def plot_top_anime_songs(start_date):
 
     topSpamSongs = topSpamSongs.sort_values(by=["playCount"], ascending=True)
     topSpamSongs["label"] = topSpamSongs.songName.apply(
-        lambda x: x[:40] + ("..." if len(x) > 25 else "")
+        lambda x: x[:40] + ("..." if len(x) > 40 else "")
     )
     fig = px.bar(topSpamSongs, x="playCount", y="label")
     fig.update_traces(

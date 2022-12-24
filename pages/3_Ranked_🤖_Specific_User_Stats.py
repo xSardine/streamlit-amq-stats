@@ -44,6 +44,9 @@ def get_username_data(username, start_date, end_date):
 
     userRankings = rankings[rankings.playerName == username]
 
+    if userRankings.empty:
+        return anime_songs, pd.DataFrame(), {}
+
     rankings_output = {}
     tmp = rankings.sort_values(by=["score"], ascending=False).reset_index(drop=True)
     tmp = tmp[tmp.score == userRankings.score.values[0]].index.values
@@ -56,6 +59,7 @@ def get_username_data(username, start_date, end_date):
     tmp = rankings.sort_values(by=["nbSoloPoints"], ascending=False).reset_index(
         drop=True
     )
+
     tmp = tmp[tmp.nbSoloPoints == userRankings.nbSoloPoints.values[0]].index.values
     rankings_output["solo"] = [min(tmp) + 1, max(tmp) + 1]
 
@@ -199,7 +203,7 @@ def plot_top_n_low_pointers(username, anime_songs, player_answers, rankingSolo):
             songName = anime_songs[anime_songs.songId == songId].songName.values[0]
             songArtist = anime_songs[anime_songs.songId == songId].songArtist.values[0]
             songInfo = f"{songName} by {songArtist}"
-            songInfo = songInfo[:70] + "..." if len(songInfo) > 35 else songInfo
+            songInfo = songInfo[:70] + "..." if len(songInfo) > 70 else songInfo
             z_tmp.append(songInfo)
 
         if len(rankedSongs) > nb_display:
