@@ -293,7 +293,7 @@ topScore, topTime, topSolo = process_top_player_df(
 allTop = process_players_top(topScore, topTime, topSolo)
 allTop.to_csv(f"data/preprocessed/allTop_{start_date}.csv")
 
-"""
+
 topScore, topTime, topSolo = process_top_player_df(
     players_answers, start_date, end_date, nbDisplay
 )
@@ -307,9 +307,8 @@ del players_answers
 
 players_answers = utils.extract_top_songs_data()
 anime_songs = utils.extract_anime_songs()
-"""
 
-"""
+
 nbDisplay = 20
 topSpamAnime, topSpamSongs, topEasySongs, topHardSongs = process_top_anime_songs(
     players_answers, anime_songs, start_date, end_date, nbDisplay
@@ -318,4 +317,3 @@ topSpamAnime.to_csv(f"data/preprocessed/topSpamAnime_{nbDisplay}_{start_date}.cs
 topSpamSongs.to_csv(f"data/preprocessed/topSpamSongs_{nbDisplay}_{start_date}.csv")
 topEasySongs.to_csv(f"data/preprocessed/topEasySongs_{nbDisplay}_{start_date}.csv")
 topHardSongs.to_csv(f"data/preprocessed/topHardSongs_{nbDisplay}_{start_date}.csv")
-"""

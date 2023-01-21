@@ -410,7 +410,7 @@ def plot_worst_songs(username, anime_songs, player_answers):
     ]
 
     if missed.empty:
-        st.success(f":orange[{username}] never missed a song more than once")
+        st.success(f":orange[{username}] never missed the same song more than once")
     else:
         st.dataframe(missed, use_container_width=True)
 
@@ -428,7 +428,7 @@ def initialize():
     st.sidebar.header("Ranked Statistics - Specific User")
 
     st.markdown(
-        "Ranked statistics are based on [blissfulyoshi](https://github.com/blissfulyoshi)'s ranked data. They start from October 1st 2022.\n\nIt is still being collected to this day, but the last update goes up to December 19th 2022."
+        "Ranked statistics are based on [blissfulyoshi](https://github.com/blissfulyoshi)'s ranked data. They start from October 1st 2022.\n\nIt is still being collected to this day for advanced ranked, but the last update goes up to December 31th 2022."
     )
     st.caption("*Data was not being collected from November 23rd to December 3rd")
 
@@ -452,14 +452,14 @@ def initialize():
         ":blue[Start date:]",
         datetime.date(2022, 10, 1),
         min_value=datetime.date(2022, 10, 1),
-        max_value=today,
+        max_value=datetime.date(2022, 12, 31),
     )
 
     end_date = col2.date_input(
         ":blue[End date:]",
-        today,
+        datetime.date(2022, 12, 31),
         min_value=datetime.date(2022, 10, 1),
-        max_value=today,
+        max_value=datetime.date(2022, 12, 31),
     )
 
     if start_date > end_date:
